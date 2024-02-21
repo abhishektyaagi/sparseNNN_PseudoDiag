@@ -20,7 +20,10 @@ from __future__ import division
 from __future__ import print_function
 
 import re
+import pdb
+import math
 import numpy as np
+import time
 from rigl import str_sparsities
 import tensorflow.compat.v1 as tf
 from google_research.micronet_challenge import counting
@@ -67,7 +70,6 @@ def get_mask_random_numpy(mask_shape, sparsity, random_state=None):
   new_mask = flat_ones.reshape(mask_shape)
   return new_mask
 
-
 def get_mask_random(mask, sparsity, dtype, random_state=None):
   """Creates a random sparse mask with deterministic sparsity.
 
@@ -83,6 +85,91 @@ def get_mask_random(mask, sparsity, dtype, random_state=None):
   """
   new_mask_numpy = get_mask_random_numpy(
       mask.shape.as_list(), sparsity, random_state=random_state)
+  new_mask = tf.constant(new_mask_numpy, dtype=dtype)
+  return new_mask
+
+
+def get_mask_pseudo_diagonal_numpy(mask_shape, sparsity, random_state=None,file_name=None):
+  """Creates a random sparse mask with deterministic sparsity.
+
+  Args:
+    mask_shape: list, used to obtain shape of the random mask.
+    sparsity: float, between 0 and 1.
+    random_state: np.random.RandomState, if given the shuffle call is made using
+      the RandomState
+
+  Returns:
+    numpy.ndarray
+  """
+  # Create an array of zeros with the specified shape
+  mask = np.zeros(mask_shape)
+  print("Sparsity is ", sparsity)
+  if(sparsity != float(0)):
+    elemBudget = (1 - sparsity)*mask_shape[0]*mask_shape[1]
+  else:
+      elemBudget = float(0)
+  totalDiag = math.floor(float(elemBudget)/float(min(mask_shape[0],mask_shape[1])))
+  print("Element budget is ", elemBudget)
+  print("Total Diag count is ", totalDiag)
+ 
+  print("Shape is ",mask_shape)
+
+ # Set the main diagonal elements to ones
+  np.fill_diagonal(mask, 1)
+
+  #TODO: Change it to depend on the sparsity
+  #r = 6
+  r = []
+
+  np.random.seed(int(time.time()))
+  #r = np.random.choice(np.arange(1, min(mask_shape[0], mask_shape[1])), size=totalDiag-1, replace=False)
+  r = np.random.choice(np.arange(1, mask_shape[0]), size=totalDiag-1, replace=False)
+  print("List of starting indexes is ", r)
+
+  # Set each specified diagonal starting from its unique position
+  for start_pos in r:
+    # Calculate indices for the diagonal
+    # Adjust how many steps each diagonal takes based on the minimum dimension of the matrix
+    steps = min(mask_shape)  # Ensures the diagonal length is equal to the shorter dimension
+    row_indices = (np.arange(steps) + start_pos) % mask_shape[0]
+    col_indices = np.arange(steps) % mask_shape[1]
+    
+    # Set the diagonal elements to 1, considering the actual shape and the new diagonal length
+    for i in range(steps):
+        mask[row_indices[i % mask_shape[0]], col_indices[i % mask_shape[1]]] = 1
+
+
+  # If a random_state object is provided, shuffle the diagonal elements
+  with open('/p/dataset/abhishek/diag_pos_'+file_name+'.txt', 'a') as f:
+    # Write the max accuracy to the file
+    f.write(str(r))
+    f.write("\n")
+  
+  '''if random_state:
+    random_state.shuffle(mask.diagonal())
+    random_state.shuffle(mask.diagonal(offset=r))
+  else:
+    np.random.shuffle(mask.diagonal())
+    np.random.shuffle(mask.diagonal(offset=r))
+    '''
+  return mask
+
+
+def get_mask_pseudo_diagonal(mask, sparsity, dtype, random_state=None,file_name=None):
+  """Creates a random sparse mask with deterministic sparsity.
+
+  Args:
+    mask: tf.Tensor, used to obtain shape of the random mask.
+    sparsity: float, between 0 and 1.
+    dtype: tf.dtype, type of the return value.
+    random_state: np.random.RandomState, if given the shuffle call is made using
+      the RandomState
+
+  Returns:
+    tf.Tensor
+  """
+  new_mask_numpy = get_mask_pseudo_diagonal_numpy(
+      mask.shape.as_list(), sparsity, random_state=random_state,file_name=file_name)
   new_mask = tf.constant(new_mask_numpy, dtype=dtype)
   return new_mask
 
@@ -322,7 +409,8 @@ def get_mask_init_fn(all_masks,
                      custom_sparsity_map,
                      mask_fn=get_mask_random,
                      erk_power_scale=DEFAULT_ERK_SCALE,
-                     extract_name_fn=mask_extract_name_fn):
+                     extract_name_fn=mask_extract_name_fn,
+                     file_name=None):
   """Returns a function for initializing masks randomly.
 
   Args:
@@ -357,7 +445,7 @@ def get_mask_init_fn(all_masks,
                   str(sparsities))
   assign_ops = []
   for mask in all_masks:
-    new_mask = mask_fn(mask, sparsities[mask.name], mask.dtype)
+    new_mask = mask_fn(mask, sparsities[mask.name], mask.dtype, file_name=file_name)
     assign_op = tf.assign(mask, new_mask)
     assign_ops.append(assign_op)
 
