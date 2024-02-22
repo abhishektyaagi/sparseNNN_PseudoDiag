@@ -114,30 +114,56 @@ def get_mask_pseudo_diagonal_numpy(mask_shape, sparsity, random_state=None,file_
  
   print("Shape is ",mask_shape)
 
- # Set the main diagonal elements to ones
+  #Set the main diagonal elements to ones
   np.fill_diagonal(mask, 1)
+  # Calculate the length of the diagonals
+  diag_length = min(mask_shape[0], mask_shape[1])
+
 
   #TODO: Change it to depend on the sparsity
   #r = 6
   r = []
 
   np.random.seed(int(time.time()))
+
+  # Determine custom sequence of starting positions
+  start_positions = []
+  oddIndStart = 1
+  evenIndStart = mask_shape[0] - 1
+  for i in range(1, totalDiag-3):
+    #print("i is ",i)
+      
+    if i % 2 == 1:  # Odd positions start from the top going down
+      #start_positions.append(min(i, rows - 1))
+      start_positions.append(oddIndStart)
+      oddIndStart = oddIndStart + 1
+    else:  # Even positions start from the bottom going up
+      #start_positions.append(rows - min(i, rows - 1))
+      start_positions.append(evenIndStart)
+      evenIndStart = evenIndStart - 1
+
+  potential_starts = [i for i in range(1, mask_shape[0]) if i not in start_positions]
+  new_starts = np.random.choice(potential_starts, size=2, replace=False)
+  new_starts_list = new_starts.tolist()
+
+  r = start_positions + new_starts_list
+
   #r = np.random.choice(np.arange(1, min(mask_shape[0], mask_shape[1])), size=totalDiag-1, replace=False)
-  r = np.random.choice(np.arange(1, mask_shape[0]), size=totalDiag-1, replace=False)
+  #r = np.random.choice(np.arange(1, mask_shape[0]), size=totalDiag-1, replace=False)
+  
   print("List of starting indexes is ", r)
 
-  # Set each specified diagonal starting from its unique position
-  for start_pos in r:
-    # Calculate indices for the diagonal
-    # Adjust how many steps each diagonal takes based on the minimum dimension of the matrix
-    steps = min(mask_shape)  # Ensures the diagonal length is equal to the shorter dimension
-    row_indices = (np.arange(steps) + start_pos) % mask_shape[0]
-    col_indices = np.arange(steps) % mask_shape[1]
-    
-    # Set the diagonal elements to 1, considering the actual shape and the new diagonal length
-    for i in range(steps):
-        mask[row_indices[i % mask_shape[0]], col_indices[i % mask_shape[1]]] = 1
-
+  for start_row in r:
+    current_row, current_col = (start_row ) % mask_shape[0], 0
+    for _ in range(diag_length):
+      mask[current_row % mask_shape[0], current_col % mask_shape[1]] = 1
+      current_row += 1
+      current_col += 1
+            
+      # Handle wrap-around logic for diagonals extending beyond the matrix width
+      if start_row > mask_shape[0] - mask_shape[1] and current_row >= mask_shape[0]:
+        wrap_around_offset = start_row - (mask_shape[0] - mask_shape[1])
+        current_col = wrap_around_offset + (current_col - wrap_around_offset) % mask_shape[1]
 
   # If a random_state object is provided, shuffle the diagonal elements
   with open('/p/dataset/abhishek/diag_pos_'+file_name+'.txt', 'a') as f:

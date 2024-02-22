@@ -24,6 +24,7 @@ from __future__ import print_function
 import os
 import time
 from absl import flags
+import pdb
 
 import numpy as np
 from rigl import sparse_optimizers
@@ -39,6 +40,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 flags.DEFINE_string('mnist', '/tmp/data', 'Location of the MNIST ' 'dataset.')
 
 ## optimizer hyperparameters
+flags.DEFINE_string('file_name', 'run', 'The name to append to output files')
 flags.DEFINE_integer('batch_size', 100, 'The number of samples in each batch')
 flags.DEFINE_float('learning_rate', .2, 'Initial learning rate.')
 flags.DEFINE_float('momentum', .9, 'Momentum.')
@@ -95,7 +97,7 @@ flags.DEFINE_string(
     '`random`, `erdos_renyi`.')
 flags.DEFINE_integer('prune_begin_step', 2000, 'step to begin pruning')
 flags.DEFINE_integer('prune_end_step', 30000, 'step to end pruning')
-flags.DEFINE_float('end_sparsity', .98, 'desired sparsity of final model.')
+flags.DEFINE_float('end_sparsity', 0.97, 'desired sparsity of final model.')
 flags.DEFINE_integer('pruning_frequency', 500, 'how often to prune.')
 flags.DEFINE_float('threshold_decay', 0, 'threshold_decay for pruning.')
 flags.DEFINE_string('save_path', '', 'Where to save the model.')
@@ -158,8 +160,6 @@ def mnist_network_fc(input_batch, reuse=False, model_pruning=False):
       tf.cast(tf.equal(input_batch[1], predictions), tf.float32))
 
   return cross_entropy, accuracy
-
-
 
 
 def get_compressed_fc(masks):
@@ -267,8 +267,8 @@ def main(unused_args):
   else:
     raise RuntimeError(FLAGS.optimizer + ' is unknown optimizer type')
   custom_sparsities = {
-      'layer2': FLAGS.end_sparsity * FLAGS.sparsity_scale,
-      'layer3': FLAGS.end_sparsity * 0
+      'layer2': 0.97,#FLAGS.end_sparsity * 1,
+      'layer3': 0.97#FLAGS.end_sparsity * 0.98
   }
 
   if FLAGS.training_method == 'set':
@@ -313,7 +313,8 @@ def main(unused_args):
     pass
   else:
     raise ValueError('Unsupported pruning method: %s' % FLAGS.training_method)
-
+  
+  opt = tf.train.GradientDescentOptimizer(learning_rate)
   train_op = opt.minimize(cross_entropy_train, global_step=global_step)
 
 
@@ -344,9 +345,13 @@ def main(unused_args):
     tf.logging.info('No mask is set, starting dense.')
   else:
     all_masks = pruning.get_masks()
+  #  pdb.set_trace()
+    #mask_init_op = sparse_utils.get_mask_init_fn(
+    #    all_masks, FLAGS.mask_init_method, FLAGS.end_sparsity,
+    #    custom_sparsities)
     mask_init_op = sparse_utils.get_mask_init_fn(
         all_masks, FLAGS.mask_init_method, FLAGS.end_sparsity,
-        custom_sparsities)
+        custom_sparsities, mask_fn=sparse_utils.get_mask_pseudo_diagonal,file_name=FLAGS.file_name)
 
   if FLAGS.save_model:
     saver = tf.train.Saver()
@@ -401,9 +406,11 @@ def main(unused_args):
           'Sparsity Layer 0', 'Sparsity Layer 1'
       ])
       sess.run(init_op)
+      #pdb.set_trace()
       sess.run(mask_init_op)
       tic = time.time()
       mask_records = {}
+      maxAcc = 0
       with tf.io.gfile.GFile(filename, 'w') as outputfile:
         print(log_str)
         print(log_str, file=outputfile)
@@ -411,6 +418,7 @@ def main(unused_args):
           if (FLAGS.mask_record_frequency > 0 and
               i % FLAGS.mask_record_frequency == 0):
             mask_vals = sess.run(pruning.get_masks())
+            #pdb.set_trace()
             # Cast into bool to save space.
             mask_records[i] = [a.astype(bool) for a in mask_vals]
           sess.run([train_op])
@@ -421,6 +429,8 @@ def main(unused_args):
             loss, accuracy, summary = sess.run([cross_entropy_test,
                                                 accuracy_test,
                                                 merged_summary_op])
+            if(accuracy > maxAcc):
+              maxAcc = accuracy
             # Write logs at every test iteration.
             summary_writer.add_summary(summary, i)
             log_str = '%d, %d, %.4f, %.4f, %.4f, %.4f, %.4f' % (
@@ -432,11 +442,17 @@ def main(unused_args):
             if FLAGS.network_type == 'fc':
               sparsities, sizes = get_compressed_fc(mask_vals)
               print('[COMPRESSED SPARSITIES/SHAPE]: %s %s' % (sparsities,
-                                                              sizes))
+                                                             sizes))
               print('[COMPRESSED SPARSITIES/SHAPE]: %s %s' % (sparsities,
                                                               sizes),
                     file=outputfile)
             tic = time.time()
+      
+      with open('/p/dataset/abhishek/max_accuracy_'+FLAGS.file_name+'.txt', 'a') as f:
+        # Write the max accuracy to the file
+        f.write(str(maxAcc))
+        f.write("\n")
+
       if FLAGS.save_model:
         saver.save(sess, os.path.join(FLAGS.save_path, 'model.ckpt'))
       if mask_records:
