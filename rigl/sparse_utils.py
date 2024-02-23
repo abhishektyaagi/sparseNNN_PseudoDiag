@@ -130,7 +130,14 @@ def get_mask_pseudo_diagonal_numpy(mask_shape, sparsity, random_state=None,file_
   start_positions = []
   oddIndStart = 1
   evenIndStart = mask_shape[0] - 1
-  for i in range(1, totalDiag-3):
+  
+  #TODO: Fix for other dimensions
+  if(totalDiag == 3 or totalDiag == 9):
+    remainderDiagCount = 1
+  else:
+    remainderDiagCount = 12
+  
+  for i in range(1, totalDiag-remainderDiagCount - 1):
     #print("i is ",i)
       
     if i % 2 == 1:  # Odd positions start from the top going down
@@ -143,7 +150,7 @@ def get_mask_pseudo_diagonal_numpy(mask_shape, sparsity, random_state=None,file_
       evenIndStart = evenIndStart - 1
 
   potential_starts = [i for i in range(1, mask_shape[0]) if i not in start_positions]
-  new_starts = np.random.choice(potential_starts, size=2, replace=False)
+  new_starts = np.random.choice(potential_starts, size=remainderDiagCount, replace=False)
   new_starts_list = new_starts.tolist()
 
   r = start_positions + new_starts_list
