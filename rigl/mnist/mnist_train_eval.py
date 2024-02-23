@@ -460,4 +460,9 @@ def main(unused_args):
 
 
 if __name__ == '__main__':
+  if tf.test.is_gpu_available():
+    print("GPU is available")
+  else:
+    print("GPU not available")  
+  pdb.set_trace()
   tf.app.run()
