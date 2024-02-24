@@ -464,5 +464,5 @@ if __name__ == '__main__':
     print("GPU is available")
   else:
     print("GPU not available")  
-  pdb.set_trace()
+  #pdb.set_trace()
   tf.app.run()

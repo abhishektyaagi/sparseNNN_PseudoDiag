@@ -108,17 +108,21 @@ def get_mask_pseudo_diagonal_numpy(mask_shape, sparsity, random_state=None,file_
     elemBudget = (1 - sparsity)*mask_shape[0]*mask_shape[1]
   else:
       elemBudget = float(0)
-  totalDiag = math.floor(float(elemBudget)/float(min(mask_shape[0],mask_shape[1])))
+
+  # Calculate the length of the diagonals
+  #diag_length = min(mask_shape[0], mask_shape[1])
+  diag_length = max(mask_shape[0], mask_shape[1])
+  totalDiag = math.floor(float(elemBudget)/float(diag_length))
   print("Element budget is ", elemBudget)
   print("Total Diag count is ", totalDiag)
  
   print("Shape is ",mask_shape)
 
+  if(mask_shape[0] == 100 and mask_shape[0] == 10):
+      totalDiag = 1
+      diag_length = elemBudget
   #Set the main diagonal elements to ones
-  np.fill_diagonal(mask, 1)
-  # Calculate the length of the diagonals
-  diag_length = min(mask_shape[0], mask_shape[1])
-
+  #np.fill_diagonal(mask, 1)
 
   #TODO: Change it to depend on the sparsity
   #r = 6
@@ -128,49 +132,33 @@ def get_mask_pseudo_diagonal_numpy(mask_shape, sparsity, random_state=None,file_
 
   # Determine custom sequence of starting positions
   start_positions = []
-  oddIndStart = 1
-  evenIndStart = mask_shape[0] - 1
+  used_rows = set()
+
+  start_row = 0
+  start_col = 0
+  used_rows.add(0)
+
+  start_positions.append((0,0))  
   
-  #TODO: Fix for other dimensions
-  if(totalDiag == 3 or totalDiag == 9):
-    remainderDiagCount = 1
-  else:
-    remainderDiagCount = 12
+  for i in range(totalDiag-1):
+    start_row = np.random.choice([row for row in range(mask_shape[1]) if row not in used_rows])
+    used_rows.add(start_row)
+    start_positions.append((start_row,start_col))
   
-  for i in range(1, totalDiag-remainderDiagCount - 1):
-    #print("i is ",i)
-      
-    if i % 2 == 1:  # Odd positions start from the top going down
-      #start_positions.append(min(i, rows - 1))
-      start_positions.append(oddIndStart)
-      oddIndStart = oddIndStart + 1
-    else:  # Even positions start from the bottom going up
-      #start_positions.append(rows - min(i, rows - 1))
-      start_positions.append(evenIndStart)
-      evenIndStart = evenIndStart - 1
-
-  potential_starts = [i for i in range(1, mask_shape[0]) if i not in start_positions]
-  new_starts = np.random.choice(potential_starts, size=remainderDiagCount, replace=False)
-  new_starts_list = new_starts.tolist()
-
-  r = start_positions + new_starts_list
-
-  #r = np.random.choice(np.arange(1, min(mask_shape[0], mask_shape[1])), size=totalDiag-1, replace=False)
-  #r = np.random.choice(np.arange(1, mask_shape[0]), size=totalDiag-1, replace=False)
-  
-  print("List of starting indexes is ", r)
-
+  r = [start_positions[i][0] for i in range(len(start_positions))]
+  #pdb.set_trace()
   for start_row in r:
-    current_row, current_col = (start_row ) % mask_shape[0], 0
+    current_row, current_col = (start_row)% mask_shape[0], 0
+    #print(start_row, start_col)
     for _ in range(diag_length):
       mask[current_row % mask_shape[0], current_col % mask_shape[1]] = 1
+      #print("mask",current_row % mask_shape[0], current_col % mask_shape[1])
       current_row += 1
       current_col += 1
-            
+
       # Handle wrap-around logic for diagonals extending beyond the matrix width
-      if start_row > mask_shape[0] - mask_shape[1] and current_row >= mask_shape[0]:
-        wrap_around_offset = start_row - (mask_shape[0] - mask_shape[1])
-        current_col = wrap_around_offset + (current_col - wrap_around_offset) % mask_shape[1]
+      if current_row == mask_shape[0]:
+        current_col = mask_shape[1] - start_row
 
   # If a random_state object is provided, shuffle the diagonal elements
   with open('/p/dataset/abhishek/diag_pos_'+file_name+'.txt', 'a') as f:
@@ -185,6 +173,7 @@ def get_mask_pseudo_diagonal_numpy(mask_shape, sparsity, random_state=None,file_
     np.random.shuffle(mask.diagonal())
     np.random.shuffle(mask.diagonal(offset=r))
     '''
+  print("Number of non-zeros: ", np.count_nonzero(mask))
   return mask
 
 
